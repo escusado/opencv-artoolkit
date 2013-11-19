@@ -24,7 +24,7 @@ def extract_green(img):
     img_threshold = np.zeros((height, width, 3), np.uint8)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    lower_bound = np.array([58, 100, 100])
+    lower_bound = np.array([58, 80, 80])
     upper_bound = np.array([68, 255, 255])
 
     img_threshold = cv2.inRange(img_hsv, lower_bound, upper_bound)
@@ -54,7 +54,7 @@ def process_frames():
 
         if ret:
             img_threshold = extract_green(frame)
-            cv2.imshow('frame', track_features(img_threshold, frame))
+            cv2.imshow('frame', img_threshold)
 
         if cv2.waitKey(10) & 0xFF == ord('q'):
             break
