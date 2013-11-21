@@ -14,6 +14,27 @@ trackers = {
         "slopeThreshold" : [50, 200, lambda x: handle_change("slopeThreshold", x)],
         }
 
+inputFile = None
+selectedProcess = None
+
+def usage():
+    "Print the usage for this app."
+    sys.stderr.write(str.format('Usage: {0} inputPath [selectedProcess]', sys.argv[0]))
+
+def check_arguments():
+    "Checks proper arguments, and assigns them to proper variables"
+
+    global inputFile, selectedProcess
+
+    if len(sys.argv) < 2:
+        usage()
+        exit(1)
+
+    inputFile = sys.argv[1]
+
+    if len(sys.argv) == 3:
+        selectedProcess = sys.argv[2]
+
 def handle_change(key, value):
     global trackers
     if value <= 0:
@@ -46,17 +67,20 @@ def create_window():
 def load_video():
     "Loads a video with CV"
 
-    global cap, i
+    global cap, i, inputFile
     i = 0
-    cap = cv2.VideoCapture("checo-test.mp4")
+    cap = cv2.VideoCapture(inputFile)
 
     if cap.isOpened():
         print colored("Video capture opened!", "green")
     else:
         print colored("Video capture failed!", "red")
+        usage()
         exit(1)
 
 def extract_green(img):
+
+    global selectedProcess
 
     height, width, depth = img.shape
 
@@ -68,13 +92,16 @@ def extract_green(img):
 
     img_threshold = cv2.GaussianBlur(img_hsv, (11,11), 0)
     img_threshold = cv2.inRange(img_threshold, lower_bound, upper_bound)
-    img_threshold = cv2.bitwise_not(img_threshold)
-    img_threshold = cv2.Canny(img_threshold, 0, 200)
+
+
+    if selectedProcess != "threshold":
+        img_threshold = cv2.bitwise_not(img_threshold)
+        img_threshold = cv2.Canny(img_threshold, 0, 200)
 
     return img_threshold
 
 def track_features(grey_image, original_image):
-    global trackers
+    global trackers, selectedProcess
 
     img_copy = original_image.copy()
 
@@ -84,17 +111,25 @@ def track_features(grey_image, original_image):
 
     height, width, depth = original_image.shape
 
-    # ZERO THE IMAGE
-    #img_copy = np.zeros((height, width, 3), np.uint8)
+    if selectedProcess == "hough":
+        img_copy = np.zeros((height, width, 3), np.uint8)
+        for line in lines[0]:
+            cv2.line(img_copy, (line[0], line[1]), (line[2], line[3]), (255, 150, 150), 1 )
+    else:
 
-    if lines is not None:
-        #for line in lines[0]:
-        #    cv2.line(img_copy, (line[0], line[1]), (line[2], line[3]), (255, 0, 0), 1 )
+        if lines is not None:
 
-        intersections = compute_intersections(lines[0])
-        intersections = find_important_points(grey_image, intersections)
-        for point in intersections:
-            cv2.circle(img_copy, point, 5, (255, 0, 255))
+            if selectedProcess == "intersections" or selectedProcess == "pruning":
+                img_copy = np.zeros((height, width, 3), np.uint8)
+                intersections = compute_intersections(lines[0])
+
+                if selectedProcess == "pruning":
+                    intersections = find_important_points(grey_image, intersections)
+            else:
+                intersections = compute_intersections(lines[0])
+                intersections = find_important_points(grey_image, intersections)
+            for point in intersections:
+                cv2.circle(img_copy, point, 5, (255, 0, 255))
 
     return img_copy
 
@@ -181,18 +216,23 @@ def get_average_point(points):
 def process_frames():
     "Reads the frames from the capture device and processes"
 
-    global cap, i
+    global cap, i, selectedProcess
 
     while True:
         ret, frame = cap.read()
 
         if ret:
-            img_threshold = extract_green(frame)
-            final_frame = track_features(img_threshold, frame)
-            #final_frame = img_threshold
+            final_frame = frame
+            if selectedProcess != "raw":
+                final_frame = extract_green(frame)
+
+                if selectedProcess != "threshold" and selectedProcess != "edges":
+                    final_frame = track_features(final_frame, frame)
+                    #final_frame = img_threshold
 
             final_frame = resize_frame(final_frame)
             final_frame = draw_text(final_frame)
+
             cv2.imshow('frame', final_frame)
             cv2.imwrite('points' + str(i) + '.png', final_frame)
             i = i + 1
@@ -211,6 +251,7 @@ def cleanup():
     cv2.destroyAllWindows()
 
 def run():
+    check_arguments()
     create_window()
     define_trackers()
     load_video()
